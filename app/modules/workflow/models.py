@@ -1,3 +1,5 @@
+# app/modules/workflow/models.py
+
 from datetime import datetime
 from typing import Literal
 from beanie import Document, PydanticObjectId, Indexed
@@ -9,22 +11,36 @@ class SlotSchema(BaseModel):
     prompt: str
     values: list[str] | None = None
 
+class StepTransition(BaseModel):
+    """Defines the path to the next node based on a condition."""
+    target_id: str
+    condition: str | None = None  # e.g., "response.status == 200" or "slots.choice == 'Yes'"
+
 class StepSchema(BaseModel):
     id: str
     name: str
-    method: str
-    url: str
+    # Added 'logic' type for if-else branching
+    type: Literal["start", "api", "logic", "end"] = "api"
+    
+    method: str | None = None
+    url: str | None = None
     params: dict | None = None
     body: dict | None = None
-    condition: str | None = None
-    condition_fail_message: str | None = None
+    
+    next_steps: list[StepTransition] = [] 
     output_map: dict[str, str] = {}
+
+    # PERSISTENCE: Stores (x, y) coordinates so the graph doesn't reset on refresh
+    position: dict[str, float] = Field(default_factory=lambda: {"x": 0, "y": 0})
+    
+    condition_fail_message: str | None = None
 
 class WorkflowDefinition(BaseModel):
     name: str
     triggers: list[str]
     slots: list[SlotSchema]
-    steps: list[StepSchema]
+    # Collection of nodes in a directed graph
+    steps: list[StepSchema] 
     response_template: str
     summary: str
 
@@ -37,5 +53,4 @@ class WorkflowDoc(Document):
 
     class Settings:
         name = "workflows"
-        # We index is_active for fast filtering
         indexes = ["is_active"]
